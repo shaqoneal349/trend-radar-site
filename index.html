@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trend Radar</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --surface:#fff; --line:#e3e6ea; --ink:#1b1f24; --ink2:#5b6470; --muted:#8a93a0;
+    --google:#2f6fe0; --threads:#1a9e8c; --accent:#1b1f24;
+    --good:#2e8b57; --warn:#d08700; --serious:#d9480f; --critical:#c92a2a; --cool:#3b7dd8; --flat:#9aa3ad;
+    --radius:10px; --mono:ui-monospace,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+    --bg:#111418; --surface:#1a1f26; --line:#2a313a; --ink:#e8ebef; --ink2:#aab3bd; --muted:#7a838e;
+    --google:#6a9af5; --threads:#3fbfae; --accent:#e8ebef; }}
+  :root[data-theme="dark"]{ --bg:#111418; --surface:#1a1f26; --line:#2a313a; --ink:#e8ebef; --ink2:#aab3bd; --muted:#7a838e; --google:#6a9af5; --threads:#3fbfae; --accent:#e8ebef; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,"Segoe UI","Noto Sans TC","Microsoft JhengHei",sans-serif}
+  a{color:inherit}
+  .wrap{max-width:1280px;margin:0 auto;padding:20px 16px 60px}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px}
+  h1{font-size:22px;margin:0;letter-spacing:.3px}
+  h1 small{font-weight:400;color:var(--ink2);font-size:14px;margin-left:8px}
+  .tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  select,button,input{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+  button{cursor:pointer} button:hover{border-color:var(--ink2)} button:disabled{opacity:.5;cursor:default}
+  button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+  .status{font-size:12px;color:var(--muted)}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+  .kpi .l{font-size:12px;color:var(--ink2)} .kpi .v{font-size:26px;font-weight:600;line-height:1.2;margin-top:2px}
+  .kpi .s{font-size:11px;color:var(--muted)}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:8px 0 14px;flex-wrap:wrap}
+  .tab{padding:8px 14px;border:0;background:none;border-radius:8px 8px 0 0;color:var(--ink2);cursor:pointer}
+  .tab.on{color:var(--ink);font-weight:600;box-shadow:inset 0 -2px 0 var(--ink)}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .filters input{min-width:200px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;cursor:pointer}
+  .card:hover{border-color:var(--ink2)}
+  .card .t{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+  .card .kw{font-weight:600;font-size:16px}
+  .card .rank{color:var(--muted);font-size:12px;font-family:var(--mono)}
+  .bars{margin:8px 0 6px;display:grid;grid-template-columns:52px 1fr 34px;gap:4px 8px;align-items:center;font-size:12px;color:var(--ink2)}
+  .bar{height:6px;border-radius:4px;background:var(--line);overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:4px}
+  .bar.g i{background:var(--google)} .bar.t i{background:var(--threads)}
+  .bars .n{font-family:var(--mono);text-align:right}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .tag{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--ink2);background:transparent}
+  .tag.sig{border-color:transparent;background:var(--bg)}
+  .tag.biz-高{border-color:var(--good);color:var(--good)} .tag.biz-中{border-color:var(--warn);color:var(--warn)}
+  .angle{margin-top:6px;font-size:12px;color:var(--ink2)}
+  .angle b{color:var(--ink)}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;font-size:13px}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{font-weight:600;color:var(--ink2);font-size:12px;background:var(--bg);position:sticky;top:0;cursor:pointer;white-space:nowrap}
+  th.sorted::after{content:" ↓";color:var(--muted)}
+  td.num,th.num{text-align:right;font-family:var(--mono)}
+  tr.row{cursor:pointer} tr.row:hover td{background:color-mix(in srgb,var(--bg) 60%,transparent)}
+  .mini{display:inline-block;width:70px;height:6px;border-radius:4px;background:var(--line);vertical-align:middle;margin-right:6px;overflow:hidden}
+  .mini i{display:block;height:100%}
+  .mini.g i{background:var(--google)} .mini.t i{background:var(--threads)}
+  .muted{color:var(--muted)}
+  .empty{padding:40px;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:var(--radius)}
+  /* drawer */
+  .drawer{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:10}
+  .drawer.on{display:block}
+  .panel{position:absolute;right:0;top:0;bottom:0;width:min(560px,100%);background:var(--surface);border-left:1px solid var(--line);overflow:auto;padding:18px 20px}
+  .panel h2{margin:0 0 4px;font-size:20px}
+  .panel .meta{font-size:12px;color:var(--ink2);margin-bottom:10px}
+  .panel .close{position:absolute;right:14px;top:12px}
+  .post{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:8px}
+  .post .a{font-weight:600;font-size:13px} .post .a span{color:var(--muted);font-weight:400;margin-left:6px;font-size:12px}
+  .post .x{margin:4px 0;white-space:pre-wrap;word-break:break-word}
+  .post .m{font-size:12px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap}
+  .post .m a{color:var(--google);text-decoration:none}
+  .sec{font-size:13px;font-weight:600;color:var(--ink2);margin:16px 0 6px}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--ink2);margin-bottom:10px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:4px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:var(--surface);font-size:13px}
+  .chip b{font-family:var(--mono);color:var(--muted);font-weight:400;margin-left:4px}
+  .runs td{font-family:var(--mono);font-size:12px}
+  .ok{color:var(--good)} .partial{color:var(--warn)} .error{color:var(--critical)}
+  @media (max-width:640px){ .hide-m{display:none} h1{font-size:18px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Trend Radar <small id="hdate"></small></h1>
+    <div class="tools">
+      <select id="dateSel" title="日期"></select>
+      <button id="btnCollect" class="live" title="立即執行一次蒐集（背景約 3～10 分鐘）">立即蒐集</button>
+      <button id="btnReport" class="live" title="產出今日 HTML / Excel / JSON">產出報表</button>
+      <button id="btnRefresh" class="live">重新整理</button>
+      <span class="status" id="status"></span>
+    </div>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab on" data-tab="top">今日 Top</button>
+    <button class="tab" data-tab="table">全部話題</button>
+    <button class="tab" data-tab="threads">Threads 先行</button>
+    <button class="tab" data-tab="google">Google 熱搜榜</button>
+    <button class="tab" data-tab="discover">Threads 新詞</button>
+    <button class="tab" data-tab="reports">報表 / 執行紀錄</button>
+  </div>
+
+  <div class="filters" id="filters">
+    <input id="q" placeholder="搜尋話題、切角、新聞…">
+    <select id="fCat"><option value="">全部分類</option></select>
+    <select id="fStage"><option value="">全部階段</option></select>
+    <select id="fSig"><option value="">全部訊號</option></select>
+    <select id="fBiz"><option value="">全部商業價值</option><option>高</option><option>中</option><option>低</option></select>
+    <select id="fAct"><option value="">全部行動</option><option>可操作</option><option>觀察</option><option>略過</option></select>
+    <span class="status" id="count"></span>
+  </div>
+
+  <div class="legend" id="legend"><span><i style="background:var(--google)"></i>Google 分數</span><span><i style="background:var(--threads)"></i>Threads 分數</span><span>階段：🟢萌芽 🟡上升 🔴爆發 ⚪高原 🔵降溫</span></div>
+
+  <div id="view"></div>
+</div>
+
+<div class="drawer" id="drawer"><div class="panel" id="panel"></div></div>
+
+<script>window.__SITE__=true;</script>
+<script>
+(function(){
+  const STATIC = !!window.__DATA__;      // 單檔離線報表：資料內嵌
+  const SITE = !!window.__SITE__;        // GitHub Pages 站台：自 data/*.json 讀取
+  let D = window.__DATA__ || null;
+  let tab = 'top', sortKey = 'trend_score', sortDesc = true;
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const STAGE = {'萌芽':'🟢','上升':'🟡','爆發':'🔴','高原':'⚪','降溫':'🔵'};
+  const fire = s => s>=75?'🔥🔥🔥':s>=50?'🔥🔥':s>0?'🔥':'—';
+  const stars = b => b==='高'?'★★★★★':b==='中'?'★★★':b==='低'?'★':'';
+  const fmtN = n => (n==null?'—':Number(n).toLocaleString('zh-TW'));
+  const fmtT = iso => iso? new Date(iso).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+
+  async function api(path, opt){ const r = await fetch(path, opt); if(!r.ok) throw new Error(await r.text()); return r.json(); }
+
+  async function load(date){
+    if (STATIC) { render(); return; }
+    $('#status').textContent = '載入中…';
+    try {
+      if (SITE) { D = await api('data/' + (date || 'latest') + '.json?t=' + Date.now()); try { D.dates = (await api('data/index.json?t=' + Date.now())).dates; } catch(e){} }
+      else D = await api('/api/snapshot' + (date?('?date='+date):''));
+      $('#status').textContent = ''; render();
+    } catch(e){ $('#status').textContent = '載入失敗：' + e.message; }
+  }
+
+  function render(){
+    if(!D){ return; }
+    document.title = `Trend Radar ${D.date}`;
+    $('#hdate').textContent = D.date + (STATIC ? '　離線報表 · 產出於 ' + fmtT(D.generatedAt) : SITE ? '　更新於 ' + fmtT(D.generatedAt) : '');
+    const sel = $('#dateSel'); sel.innerHTML = (D.dates.length?D.dates:[D.date]).map(d=>`<option ${d===D.date?'selected':''}>${d}</option>`).join('');
+    if (STATIC || SITE) document.querySelectorAll('.live').forEach(b=>b.style.display='none');
+    if (STATIC) sel.disabled = true;
+    renderKpis(); fillFilters(); renderView();
+    if (D.collecting && !STATIC) $('#status').textContent = `蒐集中（自 ${fmtT(D.collecting.startedAt)}）…`;
+  }
+
+  function renderKpis(){
+    const s = D.summary, lr = s.lastRun;
+    const items = [
+      ['話題總數', s.total, `Google 榜 ${D.google.length} 筆`],
+      ['今日新話題', s.newToday, '首次出現'],
+      ['爆發話題', s.burst, '🔴 Trend Score ≥ 75'],
+      ['同步爆發', s.sync, 'Google 高 × Threads 高'],
+      ['Threads 先行', s.threadsFirst, `已搜 ${s.threadsSearched} 詞 · ${fmtN(s.threadsPosts)} 篇`],
+      ['高商業價值', s.highBiz, `可操作 ${s.actionable} · 已分類 ${s.classified}${s.rulesOnly?`（規則 ${s.rulesOnly}）`:''}`],
+      ['最後蒐集', lr ? fmtT(lr.finished_at||lr.started_at).split(' ').pop() : '—', lr ? `<span class="${lr.status}">${lr.status}</span> ${fmtT(lr.finished_at||lr.started_at).split(' ')[0]} · ${esc((lr.note||'').split('；').slice(1).join('；') || '正常')}` : '尚未執行'],
+    ];
+    $('#kpis').innerHTML = items.map(([l,v,s])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
+  }
+
+  function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
+  function fillFilters(){
+    const keep = id => $(id).value;
+    const set = (id, vals, label) => { const v = keep(id); $(id).innerHTML = `<option value="">${label}</option>` + vals.map(x=>`<option ${x===v?'selected':''}>${x}</option>`).join(''); };
+    set('#fCat', uniq(D.topics.map(t=>t.category)).sort(), '全部分類');
+    set('#fStage', ['萌芽','上升','爆發','高原','降溫'].filter(s=>D.topics.some(t=>t.stage===s)), '全部階段');
+    set('#fSig', uniq(D.topics.map(t=>t.cross_signal)), '全部訊號');
+  }
+
+  function filtered(){
+    const q = $('#q').value.trim().toLowerCase(), c=$('#fCat').value, st=$('#fStage').value, sg=$('#fSig').value, b=$('#fBiz').value, a=$('#fAct').value;
+    return D.topics.filter(t => (!q || [t.keyword,t.momo_angle,t.google_news,t.google_related,t.category,t.event_type].join(' ').toLowerCase().includes(q))
+      && (!c || t.category===c) && (!st || t.stage===st) && (!sg || t.cross_signal===sg) && (!b || t.biz_value===b) && (!a || t.action===a));
+  }
+
+  function bars(t){
+    return `<div class="bars">
+      <span>Google</span><div class="bar g"><i style="width:${t.google_score}%"></i></div><span class="n">${t.google_score}</span>
+      <span>Threads</span><div class="bar t"><i style="width:${t.threads_score}%"></i></div><span class="n">${t.threads_searched? t.threads_score : '<span class="muted" title="本日尚未搜尋 Threads">未搜</span>'}</span>
+    </div>`;
+  }
+
+  function card(t, i){
+    return `<div class="card" data-norm="${esc(t.norm)}">
+      <div class="t"><span class="kw">${fire(t.trend_score)} ${esc(t.keyword)}</span><span class="rank">#${i+1} · ${t.trend_score}</span></div>
+      ${bars(t)}
+      <div class="tags">
+        ${t.category?`<span class="tag" title="${t.tag_model==='rules'?'規則分類（待 Claude 精修）':'Claude 分類'}">${esc(t.category)}${t.event_type?' / '+esc(t.event_type):''}${t.tag_model==='rules'?' <span class="muted">·規則</span>':''}</span>`:'<span class="tag muted">未分類</span>'}
+        <span class="tag">${STAGE[t.stage]||''} ${esc(t.stage||'')}</span>
+        ${t.cross_signal?`<span class="tag sig">${esc(t.cross_signal)}</span>`:''}
+        ${t.biz_value?`<span class="tag biz-${t.biz_value}">商業價值 ${stars(t.biz_value)}</span>`:''}
+      </div>
+      ${t.momo_angle?`<div class="angle"><b>${esc(t.action||'')}</b> · ${esc(t.momo_angle)}</div>`:(t.google_news?`<div class="angle muted">${esc(t.google_news)}</div>`:'')}
+    </div>`;
+  }
+
+  function renderView(){
+    const v = $('#view'); const list = filtered();
+    $('#filters').style.display = (tab==='top'||tab==='table'||tab==='threads') ? '' : 'none';
+    $('#legend').style.display = (tab==='top'||tab==='table'||tab==='threads') ? '' : 'none';
+    if (tab==='top'){
+      const top = list.slice(0, 20);
+      $('#count').textContent = `顯示前 ${top.length} / ${list.length}`;
+      v.innerHTML = top.length ? `<div class="cards">${top.map(card).join('')}</div>` : empty();
+    } else if (tab==='table'){
+      $('#count').textContent = `${list.length} 筆`;
+      v.innerHTML = list.length ? table(list) : empty();
+    } else if (tab==='threads'){
+      const l = list.filter(t=>t.cross_signal==='Threads先行'||t.cross_signal==='Threads限定'||(t.threads_posts>0 && !t.google_traffic));
+      $('#count').textContent = `${l.length} 筆（Google 尚未爆量、Threads 已有討論）`;
+      v.innerHTML = l.length ? `<div class="cards">${l.map(card).join('')}</div>` : empty('目前沒有 Threads 先行話題。需先 npm run login 並讓蒐集跑過 Threads。');
+    } else if (tab==='google'){
+      v.innerHTML = D.google.length ? `<table><thead><tr><th class="num">#</th><th>關鍵字</th><th class="num">搜尋量</th><th class="hide-m">起始</th><th class="hide-m">關聯查詢</th><th>新聞</th></tr></thead><tbody>${
+        D.google.map(g=>`<tr class="row" data-kw="${esc(g.keyword)}"><td class="num">${g.rank}</td><td><b>${esc(g.keyword)}</b></td><td class="num">${fmtN(g.traffic)}+</td><td class="hide-m muted">${fmtT(g.started_at)}</td><td class="hide-m muted">${esc(g.related||'')}</td><td>${g.news_title?`<a href="${esc(g.news_url||'#')}" target="_blank" rel="noopener">${esc(g.news_title)}</a> <span class="muted">${esc(g.news_source||'')}</span>`:''}</td></tr>`).join('')}</tbody></table>` : empty();
+    } else if (tab==='discover'){
+      v.innerHTML = D.discovered.length ? `<p class="muted">從 Threads 首頁推薦流、監看帳號與搜尋結果的貼文中抽出的高頻詞 / 人名 / hashtag（不靠 Google）。✓ 表示已自動回搜 Threads 並進入話題表。</p><div class="chips">${D.discovered.map(d=>`<span class="chip" title="來源：${esc(d.origin||'')}　出現於：${esc(d.from_keywords||'')}">${d.searched?'✓ ':''}${esc(d.keyword)}<b>${d.count}</b></span>`).join('')}</div>` : empty('尚無新詞（需有 Threads 貼文）。');
+    } else if (tab==='reports'){
+      renderReports(v);
+    }
+  }
+
+  function empty(msg){ return `<div class="empty">${msg||'尚無資料。請先執行一次蒐集：<code>node collector.js</code> 或按「立即蒐集」。'}</div>`; }
+
+  function table(list){
+    const cols = [['trend_score','Trend',1],['keyword','話題',0],['category','分類',0],['biz_value','商業價值',0],['action','行動',0],['momo_angle','momo 切角',0],['stage','階段',0],['cross_signal','訊號',0],['google_score','Google',1],['threads_score','Threads',1],['google_traffic','搜尋量',1],['threads_posts','貼文',1]];
+    const l = [...list].sort((a,b)=>{ const x=a[sortKey]??'', y=b[sortKey]??''; const r = typeof x==='number'||typeof y==='number' ? (Number(x)||0)-(Number(y)||0) : String(x).localeCompare(String(y),'zh-Hant'); return sortDesc?-r:r; });
+    return `<table><thead><tr>${cols.map(([k,l,n])=>`<th class="${n?'num':''} ${sortKey===k?'sorted':''}" data-k="${k}">${l}</th>`).join('')}</tr></thead><tbody>${
+      l.map(t=>`<tr class="row" data-norm="${esc(t.norm)}">
+        <td class="num"><b>${t.trend_score}</b></td>
+        <td><b>${esc(t.keyword)}</b>${t.google_news?`<div class="muted" style="font-size:11px">${esc(t.google_news)}</div>`:''}</td>
+        <td>${esc(t.category||'')}${t.event_type?`<div class="muted" style="font-size:11px">${esc(t.event_type)}${t.tag_model==='rules'?' ·規則':''}</div>`:''}</td>
+        <td class="${t.biz_value?'biz-'+t.biz_value:''}">${t.biz_value?stars(t.biz_value):''}</td>
+        <td>${esc(t.action||'')}</td><td>${esc(t.momo_angle||'')}</td>
+        <td style="white-space:nowrap">${STAGE[t.stage]||''} ${esc(t.stage||'')}</td><td style="white-space:nowrap">${esc(t.cross_signal||'')}</td>
+        <td class="num"><span class="mini g"><i style="width:${t.google_score}%"></i></span>${t.google_score}</td>
+        <td class="num"><span class="mini t"><i style="width:${t.threads_score}%"></i></span>${t.threads_searched?t.threads_score:'<span class="muted">未搜</span>'}</td>
+        <td class="num">${t.google_traffic?fmtN(t.google_traffic)+'+':'—'}</td>
+        <td class="num">${t.threads_posts||'—'}</td></tr>`).join('')}</tbody></table>`;
+  }
+
+  async function renderReports(v){
+    let reports = [];
+    if (!STATIC && !SITE) { try { reports = await api('/api/reports'); } catch(e){} }
+    v.innerHTML = `
+      <div class="sec">已產出報表</div>
+      ${reports.length ? `<table><thead><tr><th>日期</th><th>檔案</th></tr></thead><tbody>${reports.map(r=>`<tr><td>${r.date}</td><td>${r.files.map(f=>`<a href="/reports/${f}" target="_blank">${f.split('.').pop().toUpperCase()}</a>`).join(' · ')}</td></tr>`).join('')}</tbody></table>` : SITE ? `<div class="muted">各日資料：${(D.dates||[]).map(d=>`<a href="data/${d}.json" target="_blank">${d}</a>`).join(' · ')}（JSON）。Excel 報表在蒐集電腦的 reports 資料夾。</div>` : `<div class="muted">${STATIC?'離線報表不顯示此區。':'尚無報表。按上方「產出報表」或排程每日 09:00 自動產出。'}</div>`}
+      ${(D.runs||[]).length ? '<div class="sec">最近執行紀錄</div>' : ''}
+      ${(D.runs||[]).length ? `<table class="runs"><thead><tr><th>#</th><th>類型</th><th>開始</th><th>結束</th><th>狀態</th><th>備註</th></tr></thead><tbody>${
+        (D.runs||[]).map(r=>`<tr><td>${r.id}</td><td>${r.kind}</td><td>${fmtT(r.started_at)}</td><td>${fmtT(r.finished_at)}</td><td class="${r.status}">${r.status}</td><td style="font-family:inherit">${esc(r.note||'')}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${SITE ? '' : `<div class="sec">排程建議</div><div class="muted">collector.js 每 2 小時、report.js 每日 09:00、server.js 登入時啟動。執行 scripts\install_tasks.ps1 一次即可建立 Windows 工作排程。</div>`}`;
+  }
+
+  async function openTopic(norm){
+    const t = D.topics.find(x=>x.norm===norm); if(!t) return;
+    let posts = (D.posts && D.posts[norm]) || [];
+    let hist = [];
+    if (!STATIC && !SITE) { try { [posts, hist] = await Promise.all([api(`/api/posts?date=${D.date}&norm=${encodeURIComponent(norm)}`), api(`/api/history?norm=${encodeURIComponent(norm)}`)]); } catch(e){} }
+    const p = $('#panel');
+    p.innerHTML = `<button class="close" id="closeP">✕</button>
+      <h2>${fire(t.trend_score)} ${esc(t.keyword)}</h2>
+      <div class="meta">Trend Score ${t.trend_score} · ${STAGE[t.stage]||''} ${esc(t.stage||'')} · ${esc(t.cross_signal||'')} · 來源 ${esc(t.sources||'')}</div>
+      ${bars(t)}
+      <div class="tags">${t.category?`<span class="tag">${esc(t.category)} / ${esc(t.event_type||'')}</span>`:''}${t.biz_value?`<span class="tag biz-${t.biz_value}">商業價值 ${stars(t.biz_value)}</span>`:''}${t.action?`<span class="tag">${esc(t.action)}</span>`:''}</div>
+      ${t.momo_angle?`<div class="angle"><b>momo 切角</b>：${esc(t.momo_angle)}</div>`:''}
+      <div class="sec">Google</div>
+      <div class="muted">${t.google_traffic?`搜尋量 ${fmtN(t.google_traffic)}+ · 排名 #${t.google_rank} · 起始 ${fmtT(t.google_started_at)}`:'未進入 Google 熱搜榜'}</div>
+      ${t.google_related?`<div class="muted">關聯：${esc(t.google_related)}</div>`:''}
+      ${t.google_news?`<div>📰 <a href="${esc(t.google_news_url||'#')}" target="_blank" rel="noopener">${esc(t.google_news)}</a></div>`:''}
+      ${hist.length>1?`<div class="sec">近 ${hist.length} 日</div><div class="muted" style="font-family:var(--mono);font-size:12px">${hist.map(h=>`${h.date.slice(5)} 分數${h.score} 搜尋${fmtN(h.traffic)} 貼文${h.posts}`).join('<br>')}</div>`:''}
+      <div class="sec">Threads 熱門文章（${t.threads_posts} 篇 · ${t.threads_authors} 位作者 · 互動 ${fmtN(t.threads_engagement)}）</div>
+      ${posts.length ? posts.map(x=>`<div class="post"><div class="a">@${esc(x.author)}<span>${x.search_type}${x.taken_at?' · '+fmtT(x.taken_at*1000):''}</span></div><div class="x">${esc(x.text)}</div><div class="m"><span>♥ ${fmtN(x.likes)}</span><span>💬 ${fmtN(x.replies)}</span><span>🔁 ${fmtN(x.reposts)}</span>${x.url?`<a href="${esc(x.url)}" target="_blank" rel="noopener">查看原文 →</a>`:''}</div></div>`).join('')
+        : `<div class="muted">${t.threads_searched?'有搜尋但未取得貼文（可能無相關討論或登入失效）。':'本日尚未搜尋此詞（Threads 未登入，或不在本輪種子：Google 前段 + 關鍵字池輪替）。'}</div>`}`;
+    $('#drawer').classList.add('on');
+    $('#closeP').onclick = closeP;
+  }
+  function closeP(){ $('#drawer').classList.remove('on'); }
+
+  // events
+  $('#tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if(!b) return; tab = b.dataset.tab; document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on', x===b)); renderView(); });
+  ['#q','#fCat','#fStage','#fSig','#fBiz','#fAct'].forEach(s => $(s).addEventListener('input', renderView));
+  $('#view').addEventListener('click', e => {
+    const th = e.target.closest('th[data-k]'); if (th){ const k=th.dataset.k; if(sortKey===k) sortDesc=!sortDesc; else { sortKey=k; sortDesc = ['trend_score','google_score','threads_score','google_traffic','threads_posts'].includes(k); } renderView(); return; }
+    if (e.target.closest('a')) return;
+    const el = e.target.closest('[data-norm]'); if (el) return openTopic(el.dataset.norm);
+    const g = e.target.closest('[data-kw]'); if (g){ const t = D.topics.find(x=>x.keyword===g.dataset.kw); if (t) openTopic(t.norm); }
+  });
+  $('#drawer').addEventListener('click', e => { if (e.target.id==='drawer') closeP(); });
+  document.addEventListener('keydown', e => { if (e.key==='Escape') closeP(); });
+  $('#dateSel').addEventListener('change', e => load(e.target.value));
+  $('#btnRefresh').onclick = () => load($('#dateSel').value);
+  $('#btnCollect').onclick = async () => { const r = await api('/api/collect',{method:'POST'}); $('#status').textContent = r.started ? '已開始蒐集，約 3～10 分鐘後重新整理' : r.reason; };
+  $('#btnReport').onclick = async () => { $('#btnReport').disabled = true; try { const r = await api('/api/report?date='+$('#dateSel').value,{method:'POST'}); $('#status').textContent = `報表完成：${r.date}（${r.count} 話題）`; if(tab==='reports') renderView(); } catch(e){ $('#status').textContent='報表失敗：'+e.message; } $('#btnReport').disabled=false; };
+
+  load();
+  if (!STATIC) setInterval(() => { if (!$('#drawer').classList.contains('on')) load($('#dateSel').value); }, 5*60*1000);
+})();
+</script>
+</body>
+</html>
