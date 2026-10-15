@@ -103,7 +103,8 @@
   <div class="kpis" id="kpis"></div>
 
   <div class="tabs" id="tabs">
-    <button class="tab on" data-tab="top">今日 Top</button>
+    <button class="tab on" data-tab="biz">商機雷達</button>
+    <button class="tab" data-tab="top">全部 Top</button>
     <button class="tab" data-tab="table">全部話題</button>
     <button class="tab" data-tab="threads">Threads 先行</button>
     <button class="tab" data-tab="google">Google 熱搜榜</button>
@@ -134,7 +135,11 @@
   const STATIC = !!window.__DATA__;      // 單檔離線報表：資料內嵌
   const SITE = !!window.__SITE__;        // GitHub Pages 站台：自 data/*.json 讀取
   let D = window.__DATA__ || null;
-  let tab = 'top', sortKey = 'trend_score', sortDesc = true;
+  let tab = 'biz', sortKey = 'trend_score', sortDesc = true;
+  const COMMERCE_CATS = new Set(['3C科技','美妝','食品','家電','居家','流行','IP周邊','母嬰','旅遊','生活']);
+  // 關鍵字池的泛用詞（開箱、新品、折扣…）只是搜尋種子，不是話題；Google 榜或新詞回搜來的才算
+  const isSeedOnly = t => /(^|,)pool(,|$)/.test(t.sources||'') && !/google|discover/.test(t.sources||'');
+  const isBiz = t => !isSeedOnly(t) && ((t.biz_value === '高' || t.biz_value === '中') || (!t.biz_value && COMMERCE_CATS.has(t.category)));
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const STAGE = {'萌芽':'🟢','上升':'🟡','爆發':'🔴','高原':'⚪','降溫':'🔵'};
@@ -218,10 +223,15 @@
 
   function renderView(){
     const v = $('#view'); const list = filtered();
-    $('#filters').style.display = (tab==='top'||tab==='table'||tab==='threads') ? '' : 'none';
-    $('#legend').style.display = (tab==='top'||tab==='table'||tab==='threads') ? '' : 'none';
-    if (tab==='top'){
-      const top = list.slice(0, 20);
+    const showF = (tab==='biz'||tab==='top'||tab==='table'||tab==='threads');
+    $('#filters').style.display = showF ? '' : 'none';
+    $('#legend').style.display = showF ? '' : 'none';
+    if (tab==='biz'){
+      const l = list.filter(isBiz).sort((a,b)=>({'高':2,'中':1}[b.biz_value]||0)-({'高':2,'中':1}[a.biz_value]||0) || b.trend_score-a.trend_score);
+      $('#count').textContent = `${l.length} 個電商相關話題（商業價值高 ${l.filter(t=>t.biz_value==='高').length} · 中 ${l.filter(t=>t.biz_value==='中').length}）`;
+      v.innerHTML = l.length ? `<p class="muted" style="margin:0 0 10px">只顯示有商業價值或屬於零售品類的話題；政治、股市、賽事在「全部 Top」，平台、購物意圖等泛用種子詞不列入；品牌與品類詞若在 Threads 有討論會列入（來源 brand）。依商業價值再依熱度排序。</p><div class="cards">${l.slice(0,40).map(card).join('')}</div>` : empty('目前沒有電商相關話題。');
+    } else if (tab==='top'){
+      const top = list.filter(t=>!isSeedOnly(t)).slice(0, 20);
       $('#count').textContent = `顯示前 ${top.length} / ${list.length}`;
       v.innerHTML = top.length ? `<div class="cards">${top.map(card).join('')}</div>` : empty();
     } else if (tab==='table'){
