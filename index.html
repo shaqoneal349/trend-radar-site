@@ -109,6 +109,7 @@
     <button class="tab" data-tab="threads">Threads 先行</button>
     <button class="tab" data-tab="google">Google 熱搜榜</button>
     <button class="tab" data-tab="discover">Threads 新詞</button>
+    <button class="tab live" data-tab="monitor">回覆監控</button>
     <button class="tab" data-tab="reports">報表 / 執行紀錄</button>
   </div>
 
@@ -246,6 +247,8 @@
         D.google.map(g=>`<tr class="row" data-kw="${esc(g.keyword)}"><td class="num">${g.rank}</td><td><b>${esc(g.keyword)}</b></td><td class="num">${fmtN(g.traffic)}+</td><td class="hide-m muted">${fmtT(g.started_at)}</td><td class="hide-m muted">${esc(g.related||'')}</td><td>${g.news_title?`<a href="${esc(g.news_url||'#')}" target="_blank" rel="noopener">${esc(g.news_title)}</a> <span class="muted">${esc(g.news_source||'')}</span>`:''}</td></tr>`).join('')}</tbody></table>` : empty();
     } else if (tab==='discover'){
       v.innerHTML = D.discovered.length ? `<p class="muted">從 Threads 首頁推薦流、監看帳號與搜尋結果的貼文中抽出的高頻詞 / 人名 / hashtag（不靠 Google）。✓ 表示已自動回搜 Threads 並進入話題表。</p><div class="chips">${D.discovered.map(d=>`<span class="chip" title="來源：${esc(d.origin||'')}　出現於：${esc(d.from_keywords||'')}">${d.searched?'✓ ':''}${esc(d.keyword)}<b>${d.count}</b></span>`).join('')}</div>` : empty('尚無新詞（需有 Threads 貼文）。');
+    } else if (tab==='monitor'){
+      renderMonitor(v);
     } else if (tab==='reports'){
       renderReports(v);
     }
@@ -268,6 +271,33 @@
         <td class="num"><span class="mini t"><i style="width:${t.threads_score}%"></i></span>${t.threads_searched?t.threads_score:'<span class="muted">未搜</span>'}</td>
         <td class="num">${t.google_traffic?fmtN(t.google_traffic)+'+':'—'}</td>
         <td class="num">${t.threads_posts||'—'}</td></tr>`).join('')}</tbody></table>`;
+  }
+
+  const M = { list:'chance', topic:'', status:'待處理', data:null };
+  async function renderMonitor(v){
+    try { M.data = await api('/api/monitor'); } catch(e){ v.innerHTML = empty('讀取失敗：'+esc(e.message)); return; }
+    drawMonitor(v);
+  }
+  function drawMonitor(v){
+    const d = M.data, all = d.items.filter(x => (!M.topic || x.topic===M.topic) && (!M.status || x.status===M.status));
+    const lists = { chance: all.filter(x=>x.is_opportunity).sort((a,b)=>b.score-a.score||b.taken_at-a.taken_at), hot: all.filter(x=>!x.seller).sort((a,b)=>b.engagement-a.engagement), all: all.slice().sort((a,b)=>b.taken_at-a.taken_at) };
+    const names = { chance:'可回覆機會', hot:'熱門討論', all:'全部提及' };
+    const r = d.lastRun;
+    const warn = r && r.status!=='ok' ? `<div class="post" style="border-color:var(--warn)"><b class="partial">最後一次未完全成功</b><div class="muted">${esc(r.note||'')}</div></div>` : '';
+    const pick = lists[M.list];
+    v.innerHTML = `<p class="muted" style="margin:0 0 10px">只存在這台電腦，不會上公開網站；工具不會自動發文，回覆請自行確認後送出。最後一次抓取：${r?fmtT(r.finished_at||r.started_at):'尚未執行'}</p>${warn}
+      <div class="filters">
+        ${Object.keys(lists).map(k=>`<button data-mlist="${k}" class="${M.list===k?'primary':''}">${names[k]} ${lists[k].length}</button>`).join('')}
+        <select data-mtopic><option value="">全部話題</option>${d.topics.map(t=>`<option ${t===M.topic?'selected':''}>${esc(t)}</option>`).join('')}</select>
+        <select data-mstatus>${[['待處理','待處理'],['已回覆','已回覆'],['略過','略過'],['','全部狀態']].map(([x,l])=>`<option value="${x}" ${x===M.status?'selected':''}>${l}</option>`).join('')}</select>
+      </div>
+      ${pick.length ? pick.slice(0,100).map(x=>`<div class="post" data-mtopicv="${esc(x.topic)}" data-mcode="${esc(x.code)}">
+        <div class="a">@${esc(x.author)}<span>${esc(x.topic)}${x.taken_at?' · '+fmtT(x.taken_at*1000):''}${x.seller?' · 賣家':''}</span></div>
+        <div class="x">${esc(x.text)}</div>
+        <div class="m"><span>♥ ${fmtN(x.likes)}</span><span>💬 ${fmtN(x.replies)}</span><span>🔁 ${fmtN(x.reposts)}</span>${x.reasons?`<span>${esc(x.reasons)}</span>`:''}${x.url?`<a href="${esc(x.url)}" target="_blank" rel="noopener">查看原文並回覆 →</a>`:''}</div>
+        ${x.draft?`<div class="angle" style="margin-top:8px"><b>草稿</b>：<span class="mdraft">${esc(x.draft)}</span></div>`:''}
+        <div class="filters" style="margin:8px 0 0">${x.draft?'<button data-mcopy>複製草稿</button>':''}<button data-mset="已回覆">標記已回覆</button><button data-mset="略過">略過</button><button data-mset="待處理">改回待處理</button></div>
+      </div>`).join('') : empty('這個條件下沒有文章。')}`;
   }
 
   async function renderReports(v){
@@ -315,6 +345,19 @@
     if (e.target.closest('a')) return;
     const el = e.target.closest('[data-norm]'); if (el) return openTopic(el.dataset.norm);
     const g = e.target.closest('[data-kw]'); if (g){ const t = D.topics.find(x=>x.keyword===g.dataset.kw); if (t) openTopic(t.norm); }
+  });
+  $('#view').addEventListener('click', async e => {
+    const l = e.target.closest('[data-mlist]'); if (l){ M.list = l.dataset.mlist; drawMonitor($('#view')); return; }
+    const card = e.target.closest('[data-mcode]'); if (!card) return;
+    if (e.target.closest('[data-mcopy]')) { const b=e.target; try { await navigator.clipboard.writeText(card.querySelector('.mdraft').textContent); b.textContent='已複製'; } catch(err){ b.textContent='複製失敗'; } return; }
+    const s = e.target.closest('[data-mset]'); if (!s) return;
+    const topic = card.dataset.mtopicv, code = card.dataset.mcode, status = s.dataset.mset;
+    try { await api('/api/monitor/status',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({topic,code,status})}); const it=M.data.items.find(x=>x.topic===topic&&x.code===code); if(it) it.status=status; drawMonitor($('#view')); }
+    catch(err){ $('#status').textContent='更新失敗：'+err.message; }
+  });
+  $('#view').addEventListener('change', e => {
+    if (e.target.matches('[data-mtopic]')) { M.topic=e.target.value; drawMonitor($('#view')); }
+    if (e.target.matches('[data-mstatus]')) { M.status=e.target.value; drawMonitor($('#view')); }
   });
   $('#drawer').addEventListener('click', e => { if (e.target.id==='drawer') closeP(); });
   document.addEventListener('keydown', e => { if (e.key==='Escape') closeP(); });
