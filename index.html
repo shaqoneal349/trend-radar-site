@@ -208,6 +208,12 @@
     </div>`;
   }
 
+  function trendTag(t){
+    if (!t.trend_posts) return '';
+    const up = t.trend_prev && t.trend_posts>t.trend_prev ? `，增加 ${fmtN(t.trend_posts-t.trend_prev)} 則` : '';
+    return `<span class="tag sig">Threads 趨勢榜 ${fmtN(t.trend_posts)} 則${up}</span>`;
+  }
+
   function card(t, i){
     return `<div class="card" data-norm="${esc(t.norm)}">
       <div class="t"><span class="kw">${fire(t.trend_score)} ${esc(t.keyword)}</span><span class="rank">#${i+1} · ${t.trend_score}</span></div>
@@ -217,7 +223,9 @@
         <span class="tag">${STAGE[t.stage]||''} ${esc(t.stage||'')}</span>
         ${t.cross_signal?`<span class="tag sig">${esc(t.cross_signal)}</span>`:''}
         ${t.biz_value?`<span class="tag biz-${t.biz_value}">商業價值 ${stars(t.biz_value)}</span>`:''}
+        ${trendTag(t)}
       </div>
+      ${t.trend_summary?`<div class="angle muted">${esc(t.trend_summary)}</div>`:''}
       ${t.momo_angle?`<div class="angle"><b>${esc(t.action||'')}</b> · ${esc(t.momo_angle)}</div>`:(t.google_news?`<div class="angle muted">${esc(t.google_news)}</div>`:'')}
     </div>`;
   }
@@ -273,25 +281,45 @@
         <td class="num">${t.threads_posts||'—'}</td></tr>`).join('')}</tbody></table>`;
   }
 
-  const M = { list:'chance', topic:'', status:'待處理', data:null };
+  const M = { list:'audit', topic:'', status:'', data:null };
   async function renderMonitor(v){
     try { M.data = await api('/api/monitor'); } catch(e){ v.innerHTML = empty('讀取失敗：'+esc(e.message)); return; }
     drawMonitor(v);
   }
+  const d0 = m => m.data;
+  const FLAG_ORDER = { '客訴負評':0, '平台比較':1, '優惠活動':2, '一般討論':3 };
+  /** 平台盤查：每個平台列 48 小時內的重點文章，客訴負評優先，再看互動量 */
+  function drawAudit(d, items){
+    const since = Date.now()/1000 - 48*3600;
+    return d.topics.filter(t=>t.kind==='audit').map(t=>{
+      const mine = items.filter(x=>x.topic===t.name && x.taken_at>=since).sort((a,b)=>(FLAG_ORDER[a.flag]??9)-(FLAG_ORDER[b.flag]??9)||b.engagement-a.engagement);
+      const cnt = Object.keys(FLAG_ORDER).map(f=>`${f} ${mine.filter(x=>x.flag===f).length}`).join('、');
+      const top = [...mine.filter(x=>x.flag==='客訴負評').slice(0,5), ...mine.filter(x=>x.flag!=='客訴負評').sort((a,b)=>b.engagement-a.engagement).slice(0,5)];
+      return `<div class="sec" style="font-size:15px">${esc(t.name)}：48 小時內 ${mine.length} 篇（${cnt}）</div>` + (top.length ? top.map(x=>`<div class="post" data-mtopicv="${esc(x.topic)}" data-mcode="${esc(x.code)}">
+        <div class="a">@${esc(x.author)}<span>${esc(x.flag||'')}${x.taken_at?' · '+fmtT(x.taken_at*1000):''}</span></div>
+        <div class="x">${esc(x.text)}</div>
+        <div class="m"><span>♥ ${fmtN(x.likes)}</span><span>💬 ${fmtN(x.replies)}</span><span>🔁 ${fmtN(x.reposts)}</span>${x.url?`<a href="${esc(x.url)}" target="_blank" rel="noopener">查看原文 →</a>`:''}</div>
+        <div class="filters" style="margin:8px 0 0"><button data-mset="已回覆">已處理</button><button data-mset="略過">略過</button></div>
+      </div>`).join('') : '<div class="muted">這段時間沒有符合的文章。</div>');
+    }).join('');
+  }
   function drawMonitor(v){
-    const d = M.data, all = d.items.filter(x => (!M.topic || x.topic===M.topic) && (!M.status || x.status===M.status));
-    const lists = { chance: all.filter(x=>x.is_opportunity).sort((a,b)=>b.score-a.score||b.taken_at-a.taken_at), hot: all.filter(x=>!x.seller).sort((a,b)=>b.engagement-a.engagement), all: all.slice().sort((a,b)=>b.taken_at-a.taken_at) };
-    const names = { chance:'可回覆機會', hot:'熱門討論', all:'全部提及' };
+    const audits = new Set(d0(M).topics.filter(t=>t.kind==='audit').map(t=>t.name));
+    const d = M.data, st = d.items.filter(x => !M.status || x.status===M.status);
+    const all = st.filter(x => !audits.has(x.topic) && (!M.topic || x.topic===M.topic));
+    const auditItems = st.filter(x => audits.has(x.topic) && !x.seller);
+    const lists = { audit: auditItems, chance: all.filter(x=>x.is_opportunity).sort((a,b)=>b.score-a.score||b.taken_at-a.taken_at), hot: all.filter(x=>!x.seller).sort((a,b)=>b.engagement-a.engagement), all: all.slice().sort((a,b)=>b.taken_at-a.taken_at) };
+    const names = { audit:'平台盤查', chance:'可回覆機會', hot:'熱門討論', all:'全部提及' };
     const r = d.lastRun;
     const warn = r && r.status!=='ok' ? `<div class="post" style="border-color:var(--warn)"><b class="partial">最後一次未完全成功</b><div class="muted">${esc(r.note||'')}</div></div>` : '';
     const pick = lists[M.list];
     v.innerHTML = `<p class="muted" style="margin:0 0 10px">只存在這台電腦，不會上公開網站；工具不會自動發文，回覆請自行確認後送出。最後一次抓取：${r?fmtT(r.finished_at||r.started_at):'尚未執行'}</p>${warn}
       <div class="filters">
         ${Object.keys(lists).map(k=>`<button data-mlist="${k}" class="${M.list===k?'primary':''}">${names[k]} ${lists[k].length}</button>`).join('')}
-        <select data-mtopic><option value="">全部話題</option>${d.topics.map(t=>`<option ${t===M.topic?'selected':''}>${esc(t)}</option>`).join('')}</select>
+        <select data-mtopic><option value="">全部話題</option>${d.topics.filter(t=>t.kind!=='audit').map(t=>`<option ${t.name===M.topic?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
         <select data-mstatus>${[['待處理','待處理'],['已回覆','已回覆'],['略過','略過'],['','全部狀態']].map(([x,l])=>`<option value="${x}" ${x===M.status?'selected':''}>${l}</option>`).join('')}</select>
       </div>
-      ${pick.length ? pick.slice(0,100).map(x=>`<div class="post" data-mtopicv="${esc(x.topic)}" data-mcode="${esc(x.code)}">
+      ${M.list==='audit' ? drawAudit(d, auditItems) : pick.length ? pick.slice(0,100).map(x=>`<div class="post" data-mtopicv="${esc(x.topic)}" data-mcode="${esc(x.code)}">
         <div class="a">@${esc(x.author)}<span>${esc(x.topic)}${x.taken_at?' · '+fmtT(x.taken_at*1000):''}${x.seller?' · 賣家':''}</span></div>
         <div class="x">${esc(x.text)}</div>
         <div class="m"><span>♥ ${fmtN(x.likes)}</span><span>💬 ${fmtN(x.replies)}</span><span>🔁 ${fmtN(x.reposts)}</span>${x.reasons?`<span>${esc(x.reasons)}</span>`:''}${x.url?`<a href="${esc(x.url)}" target="_blank" rel="noopener">查看原文並回覆 →</a>`:''}</div>
@@ -323,6 +351,7 @@
       <div class="meta">Trend Score ${t.trend_score} · ${STAGE[t.stage]||''} ${esc(t.stage||'')} · ${esc(t.cross_signal||'')} · 來源 ${esc(t.sources||'')}</div>
       ${bars(t)}
       <div class="tags">${t.category?`<span class="tag">${esc(t.category)} / ${esc(t.event_type||'')}</span>`:''}${t.biz_value?`<span class="tag biz-${t.biz_value}">商業價值 ${stars(t.biz_value)}</span>`:''}${t.action?`<span class="tag">${esc(t.action)}</span>`:''}</div>
+      ${t.trend_posts?`<div class="sec">Threads 趨勢榜</div><div class="muted">${esc(t.trend_summary||'')} · ${fmtN(t.trend_posts)} 則貼文${t.trend_prev?`（上一輪 ${fmtN(t.trend_prev)}）`:''}</div>`:''}
       ${t.momo_angle?`<div class="angle"><b>momo 切角</b>：${esc(t.momo_angle)}</div>`:''}
       <div class="sec">Google</div>
       <div class="muted">${t.google_traffic?`搜尋量 ${fmtN(t.google_traffic)}+ · 排名 #${t.google_rank} · 起始 ${fmtT(t.google_started_at)}`:'未進入 Google 熱搜榜'}</div>
